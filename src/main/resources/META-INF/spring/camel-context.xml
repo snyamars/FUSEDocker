@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Configures the Camel Context -->
+
+<beans xmlns="http://www.springframework.org/schema/beans"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:cxf="http://camel.apache.org/schema/cxf"
+	xmlns:context="http://www.springframework.org/schema/context"
+	xsi:schemaLocation="http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context.xsd
+			   http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd
+              http://camel.apache.org/schema/cxf http://camel.apache.org/schema/cxf/camel-cxf.xsd
+               http://camel.apache.org/schema/spring http://camel.apache.org/schema/spring/camel-spring.xsd">
+    <context:property-placeholder location="classpath:app.properties" />
+	<cxf:rsServer id="rsServer" address="${rsServer.url}"
+		loggingFeatureEnabled="true" loggingSizeLimit="20"
+		serviceClass="com.wipro.mw.RestServiceResource" />
+
+
+
+	<bean id="dataSource" class="org.apache.commons.dbcp.BasicDataSource"
+		destroy-method="close">
+		<property name="driverClassName" value="${db.driver}" />
+		<property name="url" value="${db.url}" />
+		<property name="username" value="${db.username}" />
+		<property name="password" value="${db.password}" />
+	</bean>
+
+
+<bean id="myProcessor1" class="com.wipro.mw.Processor1" />
+	<bean id="myProcessor2" class="com.wipro.mw.Processor2" />
+	<bean id="sqlComponent" class="org.apache.camel.component.sql.SqlComponent">
+		<property name="dataSource" ref="dataSource" />
+	</bean>
+	<bean id="capitalBean" class="com.wipro.mw.SetCapital" />
+	<bean id="jms" class="org.apache.activemq.camel.component.ActiveMQComponent">
+  <property name="connectionFactory">
+    <bean class="org.apache.activemq.spring.ActiveMQConnectionFactory">
+      <property name="brokerURL" value="${broker.url}" />
+      
+    </bean>
+  </property>
+</bean>
+
+	<!--endpoint uri="infinispan://${infinispan.url}" id="infinispanDestination"/--><!-- choice>
+      <when>
+        <simple>${in.header.CamelInfinispanOperationResult} == null</simple>
+					<log message="Fetching from database" />
+					<transform>
+						<method ref="capitalBean" method="setNewCapital" />
+					</transform>
+					<to uri="sqlComponent:{{sql.selectCapital}}" />
+					<process ref="myProcessor2" />
+					
+					
+					
+					<to uri="ref:infinispanDestination" />
+        <setBody>
+          <simple>Got from DB  ${body}</simple>
+        </setBody>
+      </when>
+      <otherwise>
+        <setBody>
+          <simple>Got from cache memory  ${in.header.CamelInfinispanOperationResult}</simple>
+        </setBody>
+        <log message="Got from cache memory and body is ${body}"/>
+        
+      </otherwise>
+    </choice> --><camelContext xmlns="http://camel.apache.org/schema/spring">
+  <propertyPlaceholder location="classpath:sql.properties" id="placeholder"/>
+  <endpoint uri="activemq:queue:${broker.destination}" id="mqDestination"/>
+  <route>
+    <from uri="cxfrs:bean:rsServer"/>
+    <process ref="myProcessor1"/>
+    <setHeader headerName="CamelInfinispanOperation">
+      <simple>CamelInfinispanOperationGet</simple>
+    </setHeader>
+    <log message="Fetching from database"/>
+    <transform>
+      <method ref="capitalBean" method="setNewCapital"></method>
+    </transform>
+    <to uri="sqlComponent:{{sql.selectCapital}}"/>
+    <process ref="myProcessor2"/>
+    <!-- to ref="infinispanDestination"/> -->
+    <setBody>
+      <simple>Capital Name --- ${body}</simple>
+    </setBody>
+    <!-- to ref="infinispanDestination"/> -->
+  </route>
+  <route>
+    <from uri="timer://remote?fixedRate=true&amp;period=30000"/>
+    <setBody>
+      <simple>Message at ${date:now:yyyy-MM-dd HH:mm:ss}</simple>
+    </setBody>
+    <to ref="mqDestination"/>
+  </route>
+</camelContext>
+</beans>
+<!-- put a value -->
+<!-- Now read the same value -->
+<!-- <camelContext xmlns="http://camel.apache.org/schema/spring"> <route> 
+	<from uri="timer://remote?fixedRate=true&amp;period=5000"/> <setHeader headerName="CamelInfinispanKey"> 
+	<constant>CamelTimerCounter</constant> </setHeader> <setHeader headerName="CamelInfinispanValue"> 
+	<constant>CamelTimerCounter</constant> </setHeader> <to uri="infinispan://localhost"/> 
+	<to uri="log:remote-put?showAll=true"/> <setHeader headerName="CamelInfinispanOperation"> 
+	<constant>CamelInfinispanOperationGet</constant> </setHeader> <setHeader 
+	headerName="CamelInfinispanKey"> <constant>CamelTimerCounter</constant> </setHeader> 
+	<to uri="infinispan://localhost"/> <to uri="log:remote-get?showAll=true"/> 
+	</route> </camelContext> -->
+
